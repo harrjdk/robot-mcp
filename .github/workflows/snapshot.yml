@@ -1,0 +1,40 @@
+name: Snapshot
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build
+        run: mvn -B package -DskipTests
+
+      - name: Update snapshot tag
+        run: |
+          git tag -f snapshot
+          git push origin snapshot --force
+
+      - name: Update snapshot release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: snapshot
+          name: Snapshot (latest main)
+          prerelease: true
+          allowUpdates: true
+          files: target/robot-mcp-*.jar
+          body: |
+            Latest automated build from `main`. Not a stable release.

@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.0)'
+        required: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Set release version
+        run: mvn -B versions:set -DnewVersion=${{ github.event.inputs.version }} -DgenerateBackupPoms=false
+
+      - name: Commit release version
+        run: |
+          git add pom.xml
+          git commit -m "Release ${{ github.event.inputs.version }}"
+
+      - name: Build
+        run: mvn -B package -DskipTests
+
+      - name: Tag and push release commit
+        run: |
+          git tag v${{ github.event.inputs.version }}
+          git push origin main --tags
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          files: target/robot-mcp-*.jar
+          generate_release_notes: true
+
+      - name: Bump to next snapshot
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+          NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))-SNAPSHOT"
+          mvn -B versions:set -DnewVersion=$NEXT -DgenerateBackupPoms=false
+          git add pom.xml
+          git commit -m "Bump to $NEXT"
+          git push origin main
