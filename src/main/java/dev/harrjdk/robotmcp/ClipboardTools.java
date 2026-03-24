@@ -12,17 +12,26 @@ import java.awt.datatransfer.Transferable;
 @Component
 public class ClipboardTools {
 
+    private final ActionLog actionLog;
+
+    public ClipboardTools(ActionLog actionLog) {
+        this.actionLog = actionLog;
+    }
+
     @Tool(description = "Get the current text content of the system clipboard.")
     public String getClipboard() {
         try {
             Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
             Transferable contents = clipboard.getContents(null);
             if (contents != null && contents.isDataFlavorSupported(DataFlavor.stringFlavor)) {
-                return (String) contents.getTransferData(DataFlavor.stringFlavor);
+                String text = (String) contents.getTransferData(DataFlavor.stringFlavor);
+                actionLog.add(String.format("Read clipboard (%d chars)", text.length()));
+                return text;
             }
+            actionLog.add("Read clipboard (empty)");
             return "(clipboard is empty or contains non-text content)";
         } catch (Exception e) {
-            return "Failed to read clipboard: " + e.getMessage();
+            return String.format("Failed to read clipboard: %s", e.getMessage());
         }
     }
 
@@ -31,9 +40,14 @@ public class ClipboardTools {
         try {
             Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
             clipboard.setContents(new StringSelection(text), null);
-            return "Clipboard set (" + text.length() + " chars)";
+            return logged(String.format("Clipboard set (%d chars)", text.length()));
         } catch (Exception e) {
-            return "Failed to set clipboard: " + e.getMessage();
+            return String.format("Failed to set clipboard: %s", e.getMessage());
         }
+    }
+
+    private String logged(String result) {
+        actionLog.add(result);
+        return result;
     }
 }

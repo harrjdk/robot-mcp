@@ -95,7 +95,7 @@ public class RobotRestController {
         try {
             return ResponseEntity.ok(image(robot.captureScreenBase64()));
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(result("Screen capture failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(result(String.format("Screen capture failed: %s", e.getMessage())));
         }
     }
 
@@ -106,7 +106,16 @@ public class RobotRestController {
         try {
             return ResponseEntity.ok(image(robot.captureRegionBase64(x, y, width, height)));
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(result("Region capture failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(result(String.format("Region capture failed: %s", e.getMessage())));
+        }
+    }
+
+    @GetMapping("/screen/capture-window")
+    public ResponseEntity<Map<String, String>> captureWindow(@RequestParam String title) {
+        try {
+            return ResponseEntity.ok(image(windows.captureWindowBase64(title)));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(result(String.format("Window capture failed: %s", e.getMessage())));
         }
     }
 

@@ -1,6 +1,8 @@
 package dev.harrjdk.robotmcp;
 
 import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
@@ -13,22 +15,31 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 
 @Component
 public class RobotTools {
 
     private final Robot robot;
+    private final ActionLog actionLog;
+    private final int keyHoldMs;
 
-    public RobotTools() throws AWTException {
+    @Autowired
+    public RobotTools(ActionLog actionLog,
+                      @Value("${robot.keyHoldMs:30}") int keyHoldMs) throws AWTException {
         this.robot = new Robot();
         this.robot.setAutoDelay(10);
         this.robot.setAutoWaitForIdle(true);
+        this.actionLog = actionLog;
+        this.keyHoldMs = keyHoldMs;
     }
 
     /** Package-private constructor for unit tests — accepts a pre-built (or mocked) Robot. */
     RobotTools(Robot robot) {
         this.robot = robot;
+        this.actionLog = null;
+        this.keyHoldMs = 0;
     }
 
     // -------------------------------------------------------------------------
@@ -38,7 +49,7 @@ public class RobotTools {
     @Tool(description = "Move the mouse cursor to the specified screen coordinates.")
     public String mouseMove(int x, int y) {
         moveMouse(x, y);
-        return "Mouse moved to (" + x + ", " + y + ")";
+        return logged(String.format("Mouse moved to (%d, %d)", x, y));
     }
 
     @Tool(description = "Left-click at the specified screen coordinates.")
@@ -46,7 +57,7 @@ public class RobotTools {
         moveMouse(x, y);
         robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);
         robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
-        return "Left clicked at (" + x + ", " + y + ")";
+        return logged(String.format("Left clicked at (%d, %d)", x, y));
     }
 
     @Tool(description = "Double-click at the specified screen coordinates.")
@@ -56,7 +67,7 @@ public class RobotTools {
         robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
         robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);
         robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
-        return "Double-clicked at (" + x + ", " + y + ")";
+        return logged(String.format("Double-clicked at (%d, %d)", x, y));
     }
 
     @Tool(description = "Right-click at the specified screen coordinates.")
@@ -64,7 +75,7 @@ public class RobotTools {
         moveMouse(x, y);
         robot.mousePress(InputEvent.BUTTON3_DOWN_MASK);
         robot.mouseRelease(InputEvent.BUTTON3_DOWN_MASK);
-        return "Right clicked at (" + x + ", " + y + ")";
+        return logged(String.format("Right clicked at (%d, %d)", x, y));
     }
 
     @Tool(description = "Middle-click at the specified screen coordinates. Useful for opening links in a new tab or closing tabs.")
@@ -72,14 +83,14 @@ public class RobotTools {
         moveMouse(x, y);
         robot.mousePress(InputEvent.BUTTON2_DOWN_MASK);
         robot.mouseRelease(InputEvent.BUTTON2_DOWN_MASK);
-        return "Middle-clicked at (" + x + ", " + y + ")";
+        return logged(String.format("Middle-clicked at (%d, %d)", x, y));
     }
 
     @Tool(description = "Scroll the mouse wheel at the specified coordinates. Positive amount scrolls down, negative scrolls up.")
     public String mouseScroll(int x, int y, int amount) {
         moveMouse(x, y);
         robot.mouseWheel(amount);
-        return "Scrolled " + amount + " at (" + x + ", " + y + ")";
+        return logged(String.format("Scrolled %d at (%d, %d)", amount, x, y));
     }
 
     @Tool(description = "Drag from (x1, y1) to (x2, y2) holding the left mouse button. Moves in smooth steps.")
@@ -91,7 +102,7 @@ public class RobotTools {
             robot.mouseMove(x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps);
         }
         robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
-        return "Dragged from (" + x1 + ", " + y1 + ") to (" + x2 + ", " + y2 + ")";
+        return logged(String.format("Dragged from (%d, %d) to (%d, %d)", x1, y1, x2, y2));
     }
 
     // -------------------------------------------------------------------------
@@ -107,12 +118,12 @@ public class RobotTools {
             }
         }
         if (skipped.isEmpty()) {
-            return "Typed: " + text;
+            return logged(String.format("Typed: %s", text));
         }
         String skippedDesc = skipped.stream()
-                .map(c -> "'" + c + "'")
+                .map(c -> String.format("'%c'", c))
                 .collect(Collectors.joining(", "));
-        return "Typed: " + text + " (skipped " + skipped.size() + " unmappable character(s): " + skippedDesc + ")";
+        return logged(String.format("Typed: %s (skipped %d unmappable character(s): %s)", text, skipped.size(), skippedDesc));
     }
 
     @Tool(description = """
@@ -123,11 +134,12 @@ public class RobotTools {
     public String pressKey(String keyName) {
         Integer keyCode = resolveKeyCode(keyName.toUpperCase().trim());
         if (keyCode == null) {
-            return "Unknown key: " + keyName;
+            return logged(String.format("Unknown key: %s", keyName));
         }
         robot.keyPress(keyCode);
+        if (keyHoldMs > 0) robot.delay(keyHoldMs);
         robot.keyRelease(keyCode);
-        return "Pressed key: " + keyName;
+        return logged(String.format("Pressed key: %s", keyName));
     }
 
     @Tool(description = """
@@ -141,17 +153,18 @@ public class RobotTools {
         for (int i = 0; i < parts.length; i++) {
             Integer kc = resolveKeyCode(parts[i].trim());
             if (kc == null) {
-                return "Unknown key: " + parts[i].trim();
+                return logged(String.format("Unknown key: %s", parts[i].trim()));
             }
             keyCodes[i] = kc;
         }
         for (int kc : keyCodes) {
             robot.keyPress(kc);
         }
+        if (keyHoldMs > 0) robot.delay(keyHoldMs);
         for (int i = keyCodes.length - 1; i >= 0; i--) {
             robot.keyRelease(keyCodes[i]);
         }
-        return "Pressed combination: " + combination;
+        return logged(String.format("Pressed combination: %s", combination));
     }
 
     // -------------------------------------------------------------------------
@@ -164,21 +177,25 @@ public class RobotTools {
             virtualBounds = virtualBounds.union(screen.getDefaultConfiguration().getBounds());
         }
         BufferedImage image = robot.createScreenCapture(virtualBounds);
+        if (actionLog != null) actionLog.add("Captured full screen");
         return encodeImage(image);
     }
 
     public String captureRegionBase64(int x, int y, int width, int height) throws Exception {
         BufferedImage image = robot.createScreenCapture(new Rectangle(x, y, width, height));
+        if (actionLog != null) actionLog.add(String.format("Captured region (%d, %d, %dx%d)", x, y, width, height));
         return encodeImage(image);
     }
 
     public String captureMonitorBase64(int monitorIndex) throws Exception {
         GraphicsDevice[] screens = GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices();
         if (monitorIndex < 0 || monitorIndex >= screens.length) {
-            throw new IllegalArgumentException("Monitor index " + monitorIndex + " out of range (0–" + (screens.length - 1) + ")");
+            throw new IllegalArgumentException(
+                    String.format("Monitor index %d out of range (0–%d)", monitorIndex, screens.length - 1));
         }
         Rectangle bounds = screens[monitorIndex].getDefaultConfiguration().getBounds();
         BufferedImage image = robot.createScreenCapture(bounds);
+        if (actionLog != null) actionLog.add(String.format("Captured monitor %d", monitorIndex));
         return encodeImage(image);
     }
 
@@ -193,13 +210,12 @@ public class RobotTools {
             sb.append(String.format("Monitor %d: %dx%d at (%d,%d)%s%n",
                     i, b.width, b.height, b.x, b.y, isPrimary ? " [primary]" : ""));
         }
-        return sb.toString().trim();
+        return logged(String.format("Listed %d monitor(s)", screens.length));
     }
 
     @Tool(description = "Get the color of the pixel at the specified screen coordinates. Returns the color as a hex string like #RRGGBB.")
     public String findPixelColor(int x, int y) {
-        Color color = robot.getPixelColor(x, y);
-        return String.format("#%02X%02X%02X", color.getRed(), color.getGreen(), color.getBlue());
+        return logged(colorToHex(robot.getPixelColor(x, y)));
     }
 
     @Tool(description = """
@@ -212,22 +228,14 @@ public class RobotTools {
         try {
             target = new Color(Integer.parseInt(hex, 16));
         } catch (NumberFormatException e) {
-            return "Invalid color: " + hexColor;
+            return logged(String.format("Invalid color: %s", hexColor));
         }
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        while (System.currentTimeMillis() < deadline) {
-            Color current = robot.getPixelColor(x, y);
-            if (current.getRGB() == target.getRGB()) {
-                return "Matched " + hexColor + " at (" + x + ", " + y + ")";
-            }
-            try { Thread.sleep(100); } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
+        boolean matched = pollUntil(() -> robot.getPixelColor(x, y).getRGB() == target.getRGB(), timeoutMs);
+        if (matched) {
+            return logged(String.format("Matched %s at (%d, %d)", hexColor, x, y));
         }
-        Color actual = robot.getPixelColor(x, y);
-        return String.format("Timeout: pixel at (%d, %d) is #%02X%02X%02X, expected %s",
-                x, y, actual.getRed(), actual.getGreen(), actual.getBlue(), hexColor);
+        return logged(String.format("Timeout: pixel at (%d, %d) is %s, expected %s",
+                x, y, colorToHex(robot.getPixelColor(x, y)), hexColor));
     }
 
     @Tool(description = """
@@ -236,18 +244,13 @@ public class RobotTools {
             """)
     public String waitForScreenChange(int x, int y, int width, int height, int timeoutMs) {
         BufferedImage before = robot.createScreenCapture(new Rectangle(x, y, width, height));
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        while (System.currentTimeMillis() < deadline) {
-            try { Thread.sleep(100); } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-            BufferedImage after = robot.createScreenCapture(new Rectangle(x, y, width, height));
-            if (!imagesEqual(before, after)) {
-                return "Screen changed in region (" + x + ", " + y + ", " + width + "x" + height + ")";
-            }
+        boolean changed = pollUntil(
+                () -> !imagesEqual(before, robot.createScreenCapture(new Rectangle(x, y, width, height))),
+                timeoutMs);
+        if (changed) {
+            return logged(String.format("Screen changed in region (%d, %d, %dx%d)", x, y, width, height));
         }
-        return "Timeout: no change detected in region (" + x + ", " + y + ", " + width + "x" + height + ")";
+        return logged(String.format("Timeout: no change detected in region (%d, %d, %dx%d)", x, y, width, height));
     }
 
     // -------------------------------------------------------------------------
@@ -262,15 +265,36 @@ public class RobotTools {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        return "Slept " + capped + "ms";
+        return logged(String.format("Slept %dms", capped));
     }
 
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
+    private String logged(String result) {
+        if (actionLog != null) actionLog.add(result);
+        return result;
+    }
+
     private void moveMouse(int x, int y) {
         robot.mouseMove(x, y);
+    }
+
+    private static String colorToHex(Color color) {
+        return String.format("#%02X%02X%02X", color.getRed(), color.getGreen(), color.getBlue());
+    }
+
+    private boolean pollUntil(BooleanSupplier condition, int timeoutMs) {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            if (condition.getAsBoolean()) return true;
+            try { Thread.sleep(100); } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 
     private String encodeImage(BufferedImage image) throws Exception {
@@ -300,6 +324,7 @@ public class RobotTools {
             robot.keyPress(KeyEvent.VK_SHIFT);
         }
         robot.keyPress(keyCode);
+        if (keyHoldMs > 0) robot.delay(keyHoldMs);
         robot.keyRelease(keyCode);
         if (needsShift) {
             robot.keyRelease(KeyEvent.VK_SHIFT);

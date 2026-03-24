@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 
 @Configuration
 public class McpConfig {
@@ -24,7 +25,8 @@ public class McpConfig {
     }
 
     @Bean
-    public List<McpServerFeatures.SyncToolSpecification> screenCaptureTools(RobotTools robotTools) {
+    public List<McpServerFeatures.SyncToolSpecification> screenCaptureTools(RobotTools robotTools,
+                                                                             WindowTools windowTools) {
         var captureScreenTool = McpSchema.Tool.builder()
                 .name("captureScreen")
                 .description("Capture the full virtual desktop (all monitors) and return it as an image.")
@@ -54,66 +56,64 @@ public class McpConfig {
                         null, null, null))
                 .build();
 
+        var captureWindowTool = McpSchema.Tool.builder()
+                .name("captureWindow")
+                .description("Capture a specific window by title and return it as an image. Matches the first visible window whose title contains the given substring (case-insensitive). Restores the window first if it is minimized.")
+                .inputSchema(new McpSchema.JsonSchema("object",
+                        Map.of("titleSubstring", Map.of("type", "string", "description", "Case-insensitive substring to match against window titles")),
+                        List.of("titleSubstring"),
+                        null, null, null))
+                .build();
+
         return List.of(
                 McpServerFeatures.SyncToolSpecification.builder()
                         .tool(captureScreenTool)
-                        .callHandler((McpSyncServerExchange exchange, McpSchema.CallToolRequest request) -> {
-                            try {
-                                String base64 = robotTools.captureScreenBase64();
-                                return McpSchema.CallToolResult.builder()
-                                        .content(List.of(new McpSchema.ImageContent(null, base64, "image/png")))
-                                        .isError(false)
-                                        .build();
-                            } catch (Exception e) {
-                                return McpSchema.CallToolResult.builder()
-                                        .content(List.of(new McpSchema.TextContent("Screen capture failed: " + e.getMessage())))
-                                        .isError(true)
-                                        .build();
-                            }
-                        })
+                        .callHandler((exchange, request) -> imageToolResult(
+                                robotTools::captureScreenBase64))
                         .build(),
 
                 McpServerFeatures.SyncToolSpecification.builder()
                         .tool(captureRegionTool)
-                        .callHandler((McpSyncServerExchange exchange, McpSchema.CallToolRequest request) -> {
-                            try {
-                                Map<String, Object> args = request.arguments();
-                                int x      = ((Number) args.get("x")).intValue();
-                                int y      = ((Number) args.get("y")).intValue();
-                                int width  = ((Number) args.get("width")).intValue();
-                                int height = ((Number) args.get("height")).intValue();
-                                String base64 = robotTools.captureRegionBase64(x, y, width, height);
-                                return McpSchema.CallToolResult.builder()
-                                        .content(List.of(new McpSchema.ImageContent(null, base64, "image/png")))
-                                        .isError(false)
-                                        .build();
-                            } catch (Exception e) {
-                                return McpSchema.CallToolResult.builder()
-                                        .content(List.of(new McpSchema.TextContent("Region capture failed: " + e.getMessage())))
-                                        .isError(true)
-                                        .build();
-                            }
+                        .callHandler((exchange, request) -> {
+                            Map<String, Object> args = request.arguments();
+                            int x      = ((Number) args.get("x")).intValue();
+                            int y      = ((Number) args.get("y")).intValue();
+                            int width  = ((Number) args.get("width")).intValue();
+                            int height = ((Number) args.get("height")).intValue();
+                            return imageToolResult(() -> robotTools.captureRegionBase64(x, y, width, height));
                         })
                         .build(),
 
                 McpServerFeatures.SyncToolSpecification.builder()
                         .tool(captureMonitorTool)
-                        .callHandler((McpSyncServerExchange exchange, McpSchema.CallToolRequest request) -> {
-                            try {
-                                int monitorIndex = ((Number) request.arguments().get("monitorIndex")).intValue();
-                                String base64 = robotTools.captureMonitorBase64(monitorIndex);
-                                return McpSchema.CallToolResult.builder()
-                                        .content(List.of(new McpSchema.ImageContent(null, base64, "image/png")))
-                                        .isError(false)
-                                        .build();
-                            } catch (Exception e) {
-                                return McpSchema.CallToolResult.builder()
-                                        .content(List.of(new McpSchema.TextContent("Monitor capture failed: " + e.getMessage())))
-                                        .isError(true)
-                                        .build();
-                            }
+                        .callHandler((exchange, request) -> {
+                            int monitorIndex = ((Number) request.arguments().get("monitorIndex")).intValue();
+                            return imageToolResult(() -> robotTools.captureMonitorBase64(monitorIndex));
+                        })
+                        .build(),
+
+                McpServerFeatures.SyncToolSpecification.builder()
+                        .tool(captureWindowTool)
+                        .callHandler((exchange, request) -> {
+                            String titleSubstring = (String) request.arguments().get("titleSubstring");
+                            return imageToolResult(() -> windowTools.captureWindowBase64(titleSubstring));
                         })
                         .build()
         );
+    }
+
+    private static McpSchema.CallToolResult imageToolResult(Callable<String> capture) {
+        try {
+            String base64 = capture.call();
+            return McpSchema.CallToolResult.builder()
+                    .content(List.of(new McpSchema.ImageContent(null, base64, "image/png")))
+                    .isError(false)
+                    .build();
+        } catch (Exception e) {
+            return McpSchema.CallToolResult.builder()
+                    .content(List.of(new McpSchema.TextContent(String.format("Capture failed: %s", e.getMessage()))))
+                    .isError(true)
+                    .build();
+        }
     }
 }
