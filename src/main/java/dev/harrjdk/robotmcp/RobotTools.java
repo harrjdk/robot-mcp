@@ -24,15 +24,18 @@ public class RobotTools {
     private final Robot robot;
     private final ActionLog actionLog;
     private final int keyHoldMs;
+    private final int mouseClickHoldMs;
 
     @Autowired
     public RobotTools(ActionLog actionLog,
-                      @Value("${robot.keyHoldMs:30}") int keyHoldMs) throws AWTException {
+                      @Value("${robot.keyHoldMs:30}") int keyHoldMs,
+                      @Value("${robot.mouseClickHoldMs:30}") int mouseClickHoldMs) throws AWTException {
         this.robot = new Robot();
         this.robot.setAutoDelay(10);
         this.robot.setAutoWaitForIdle(true);
         this.actionLog = actionLog;
         this.keyHoldMs = keyHoldMs;
+        this.mouseClickHoldMs = mouseClickHoldMs;
     }
 
     /** Package-private constructor for unit tests — accepts a pre-built (or mocked) Robot. */
@@ -40,6 +43,7 @@ public class RobotTools {
         this.robot = robot;
         this.actionLog = null;
         this.keyHoldMs = 0;
+        this.mouseClickHoldMs = 0;
     }
 
     // -------------------------------------------------------------------------
@@ -56,6 +60,7 @@ public class RobotTools {
     public String leftClick(int x, int y) {
         moveMouse(x, y);
         robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);
+        if (mouseClickHoldMs > 0) robot.delay(mouseClickHoldMs);
         robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
         return logged(String.format("Left clicked at (%d, %d)", x, y));
     }
@@ -64,8 +69,10 @@ public class RobotTools {
     public String doubleClick(int x, int y) {
         moveMouse(x, y);
         robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);
+        if (mouseClickHoldMs > 0) robot.delay(mouseClickHoldMs);
         robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
         robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);
+        if (mouseClickHoldMs > 0) robot.delay(mouseClickHoldMs);
         robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
         return logged(String.format("Double-clicked at (%d, %d)", x, y));
     }
@@ -74,6 +81,7 @@ public class RobotTools {
     public String rightClick(int x, int y) {
         moveMouse(x, y);
         robot.mousePress(InputEvent.BUTTON3_DOWN_MASK);
+        if (mouseClickHoldMs > 0) robot.delay(mouseClickHoldMs);
         robot.mouseRelease(InputEvent.BUTTON3_DOWN_MASK);
         return logged(String.format("Right clicked at (%d, %d)", x, y));
     }
@@ -82,6 +90,7 @@ public class RobotTools {
     public String middleClick(int x, int y) {
         moveMouse(x, y);
         robot.mousePress(InputEvent.BUTTON2_DOWN_MASK);
+        if (mouseClickHoldMs > 0) robot.delay(mouseClickHoldMs);
         robot.mouseRelease(InputEvent.BUTTON2_DOWN_MASK);
         return logged(String.format("Middle-clicked at (%d, %d)", x, y));
     }
