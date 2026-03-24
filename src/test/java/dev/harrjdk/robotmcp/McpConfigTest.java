@@ -15,24 +15,25 @@ class McpConfigTest {
 
     private final McpConfig config = new McpConfig();
     private final RobotTools robotTools = mock(RobotTools.class);
+    private final WindowTools windowTools = mock(WindowTools.class);
 
     @Test
-    void screenCaptureTools_registersThreeTools() {
-        List<McpServerFeatures.SyncToolSpecification> tools = config.screenCaptureTools(robotTools);
-        assertThat(tools).hasSize(3);
+    void screenCaptureTools_registersFourTools() {
+        List<McpServerFeatures.SyncToolSpecification> tools = config.screenCaptureTools(robotTools, windowTools);
+        assertThat(tools).hasSize(4);
     }
 
     @Test
     void screenCaptureTools_hasExpectedNames() {
-        List<McpServerFeatures.SyncToolSpecification> tools = config.screenCaptureTools(robotTools);
+        List<McpServerFeatures.SyncToolSpecification> tools = config.screenCaptureTools(robotTools, windowTools);
         assertThat(tools)
                 .extracting(s -> s.tool().name())
-                .containsExactlyInAnyOrder("captureScreen", "captureRegion", "captureMonitor");
+                .containsExactlyInAnyOrder("captureScreen", "captureRegion", "captureMonitor", "captureWindow");
     }
 
     @Test
     void screenCaptureTools_captureScreenHasNoRequiredParams() {
-        McpServerFeatures.SyncToolSpecification captureScreen = config.screenCaptureTools(robotTools)
+        McpServerFeatures.SyncToolSpecification captureScreen = config.screenCaptureTools(robotTools, windowTools)
                 .stream()
                 .filter(s -> "captureScreen".equals(s.tool().name()))
                 .findFirst()
@@ -44,7 +45,7 @@ class McpConfigTest {
 
     @Test
     void screenCaptureTools_captureRegionRequiresFourParams() {
-        McpServerFeatures.SyncToolSpecification captureRegion = config.screenCaptureTools(robotTools)
+        McpServerFeatures.SyncToolSpecification captureRegion = config.screenCaptureTools(robotTools, windowTools)
                 .stream()
                 .filter(s -> "captureRegion".equals(s.tool().name()))
                 .findFirst()
@@ -58,7 +59,7 @@ class McpConfigTest {
 
     @Test
     void screenCaptureTools_captureMonitorRequiresMonitorIndex() {
-        McpServerFeatures.SyncToolSpecification captureMonitor = config.screenCaptureTools(robotTools)
+        McpServerFeatures.SyncToolSpecification captureMonitor = config.screenCaptureTools(robotTools, windowTools)
                 .stream()
                 .filter(s -> "captureMonitor".equals(s.tool().name()))
                 .findFirst()
@@ -71,8 +72,22 @@ class McpConfigTest {
     }
 
     @Test
+    void screenCaptureTools_captureWindowRequiresTitleSubstring() {
+        McpServerFeatures.SyncToolSpecification captureWindow = config.screenCaptureTools(robotTools, windowTools)
+                .stream()
+                .filter(s -> "captureWindow".equals(s.tool().name()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(captureWindow.tool().inputSchema().required())
+                .containsExactly("titleSubstring");
+        assertThat(captureWindow.tool().inputSchema().properties())
+                .containsKey("titleSubstring");
+    }
+
+    @Test
     void screenCaptureTools_allToolsHaveDescriptions() {
-        List<McpServerFeatures.SyncToolSpecification> tools = config.screenCaptureTools(robotTools);
+        List<McpServerFeatures.SyncToolSpecification> tools = config.screenCaptureTools(robotTools, windowTools);
         for (McpServerFeatures.SyncToolSpecification spec : tools) {
             assertThat(spec.tool().description())
                     .as("Tool '%s' should have a description", spec.tool().name())
