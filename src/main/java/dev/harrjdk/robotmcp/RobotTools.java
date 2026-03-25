@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
@@ -56,6 +57,12 @@ public class RobotTools {
         return logged(String.format("Mouse moved to (%d, %d)", x, y));
     }
 
+    @Tool(description = "Get the current mouse cursor position on screen.")
+    public String getMousePosition() {
+        Point p = MouseInfo.getPointerInfo().getLocation();
+        return logged(String.format("Mouse at (%d, %d)", p.x, p.y));
+    }
+
     @Tool(description = "Left-click at the specified screen coordinates.")
     public String leftClick(int x, int y) {
         moveMouse(x, y);
@@ -102,6 +109,41 @@ public class RobotTools {
         return logged(String.format("Scrolled %d at (%d, %d)", amount, x, y));
     }
 
+    @Tool(description = """
+            Scroll at (scrollX, scrollY) until the pixel at (watchX, watchY) matches the target hex color, \
+            or until timeoutMs elapses. Scrolls by 'scrollAmount' units per step (positive = down, negative = up), \
+            waits 'stepDelayMs' milliseconds between steps to let content load. \
+            Returns the outcome and number of scroll steps taken.\
+            """)
+    public String scrollUntilPixelColor(int scrollX, int scrollY, int scrollAmount,
+                                        int watchX, int watchY, String hexColor,
+                                        int stepDelayMs, int timeoutMs) {
+        String hex = hexColor.startsWith("#") ? hexColor.substring(1) : hexColor;
+        Color target;
+        try {
+            target = new Color(Integer.parseInt(hex, 16));
+        } catch (NumberFormatException e) {
+            return logged(String.format("Invalid color: %s", hexColor));
+        }
+        moveMouse(scrollX, scrollY);
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        int steps = 0;
+        while (System.currentTimeMillis() < deadline) {
+            if (robot.getPixelColor(watchX, watchY).getRGB() == target.getRGB()) {
+                return logged(String.format("Found %s at (%d, %d) after %d scroll step(s)",
+                        hexColor, watchX, watchY, steps));
+            }
+            robot.mouseWheel(scrollAmount);
+            steps++;
+            try { Thread.sleep(stepDelayMs); } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        return logged(String.format("Timeout: pixel at (%d, %d) is %s after %d scroll step(s), expected %s",
+                watchX, watchY, colorToHex(robot.getPixelColor(watchX, watchY)), steps, hexColor));
+    }
+
     @Tool(description = "Drag from (x1, y1) to (x2, y2) holding the left mouse button. Moves in smooth steps.")
     public String mouseDrag(int x1, int y1, int x2, int y2) {
         moveMouse(x1, y1);
@@ -117,6 +159,22 @@ public class RobotTools {
     // -------------------------------------------------------------------------
     // Keyboard
     // -------------------------------------------------------------------------
+
+    @Tool(description = """
+            Type text by placing it on the clipboard and pasting with CTRL+V. \
+            Much faster than typeText for long strings and supports Unicode and special characters. \
+            Overwrites the current clipboard contents.\
+            """)
+    public String typeTextViaClipboard(String text) {
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
+        robot.keyPress(KeyEvent.VK_CONTROL);
+        robot.keyPress(KeyEvent.VK_V);
+        if (keyHoldMs > 0) robot.delay(keyHoldMs);
+        robot.keyRelease(KeyEvent.VK_V);
+        robot.keyRelease(KeyEvent.VK_CONTROL);
+        String preview = text.length() > 50 ? text.substring(0, 50) + "..." : text;
+        return logged(String.format("Typed via clipboard: %s", preview));
+    }
 
     @Tool(description = "Type a string as keyboard input. Handles uppercase letters and common special characters on a US keyboard layout.")
     public String typeText(String text) {
@@ -248,6 +306,29 @@ public class RobotTools {
     }
 
     @Tool(description = """
+            Scan a screen region for the first pixel matching the given hex color (e.g. #FF0000 or FF0000). \
+            Scans left-to-right, top-to-bottom. Returns the absolute screen coordinates of the first match.\
+            """)
+    public String findPixelInRegion(int x, int y, int width, int height, String hexColor) {
+        String hex = hexColor.startsWith("#") ? hexColor.substring(1) : hexColor;
+        Color target;
+        try {
+            target = new Color(Integer.parseInt(hex, 16));
+        } catch (NumberFormatException e) {
+            return logged(String.format("Invalid color: %s", hexColor));
+        }
+        BufferedImage image = robot.createScreenCapture(new Rectangle(x, y, width, height));
+        for (int row = 0; row < height; row++) {
+            for (int col = 0; col < width; col++) {
+                if (new Color(image.getRGB(col, row)).getRGB() == target.getRGB()) {
+                    return logged(String.format("Found %s at (%d, %d)", hexColor, x + col, y + row));
+                }
+            }
+        }
+        return logged(String.format("Color %s not found in region (%d, %d, %dx%d)", hexColor, x, y, width, height));
+    }
+
+    @Tool(description = """
             Wait up to timeoutMs milliseconds for any pixel change within the region (x, y, width, height). \
             Polls every 100ms. Returns when a change is detected or the timeout elapses.\
             """)
@@ -260,6 +341,28 @@ public class RobotTools {
             return logged(String.format("Screen changed in region (%d, %d, %dx%d)", x, y, width, height));
         }
         return logged(String.format("Timeout: no change detected in region (%d, %d, %dx%d)", x, y, width, height));
+    }
+
+    @Tool(description = """
+            Wait up to timeoutMs milliseconds for the region (x, y, width, height) to stop changing. \
+            Polls every 100ms and returns once two consecutive captures are identical, indicating the UI has settled. \
+            Returns a timeout message if the region keeps changing.\
+            """)
+    public String waitForScreenStable(int x, int y, int width, int height, int timeoutMs) {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        BufferedImage prev = robot.createScreenCapture(new Rectangle(x, y, width, height));
+        while (System.currentTimeMillis() < deadline) {
+            try { Thread.sleep(100); } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            BufferedImage curr = robot.createScreenCapture(new Rectangle(x, y, width, height));
+            if (imagesEqual(prev, curr)) {
+                return logged(String.format("Screen stable in region (%d, %d, %dx%d)", x, y, width, height));
+            }
+            prev = curr;
+        }
+        return logged(String.format("Timeout: region (%d, %d, %dx%d) did not stabilize", x, y, width, height));
     }
 
     // -------------------------------------------------------------------------

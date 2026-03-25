@@ -5,8 +5,10 @@ import org.junit.jupiter.api.Test;
 
 import java.awt.*;
 import java.awt.event.InputEvent;
+import java.awt.image.BufferedImage;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
@@ -242,5 +244,125 @@ class RobotToolsUnitTest {
         String result = tools.waitForPixelColor(0, 0, "#FF0000", 50);
         assertThat(result).startsWith("Timeout:");
         assertThat(result).contains("expected #FF0000");
+    }
+
+    // -------------------------------------------------------------------------
+    // Screen — findPixelInRegion
+    // -------------------------------------------------------------------------
+
+    @Test
+    void findPixelInRegion_found_returnsAbsoluteCoordinates() {
+        BufferedImage img = new BufferedImage(10, 10, BufferedImage.TYPE_INT_RGB);
+        img.setRGB(3, 7, Color.RED.getRGB());
+        when(mockRobot.createScreenCapture(any(Rectangle.class))).thenReturn(img);
+
+        // Region starts at (100, 200), pixel is at local (3, 7) → absolute (103, 207)
+        assertThat(tools.findPixelInRegion(100, 200, 10, 10, "#FF0000"))
+                .isEqualTo("Found #FF0000 at (103, 207)");
+    }
+
+    @Test
+    void findPixelInRegion_notFound_returnsNotFoundMessage() {
+        BufferedImage img = new BufferedImage(5, 5, BufferedImage.TYPE_INT_RGB);
+        // all pixels black by default
+        when(mockRobot.createScreenCapture(any(Rectangle.class))).thenReturn(img);
+
+        assertThat(tools.findPixelInRegion(0, 0, 5, 5, "#FF0000"))
+                .isEqualTo("Color #FF0000 not found in region (0, 0, 5x5)");
+    }
+
+    @Test
+    void findPixelInRegion_invalidHex_returnsError() {
+        assertThat(tools.findPixelInRegion(0, 0, 10, 10, "ZZZZZZ"))
+                .isEqualTo("Invalid color: ZZZZZZ");
+        verifyNoInteractions(mockRobot);
+    }
+
+    @Test
+    void findPixelInRegion_withHashPrefix_parsedCorrectly() {
+        BufferedImage img = new BufferedImage(5, 5, BufferedImage.TYPE_INT_RGB);
+        img.setRGB(0, 0, Color.RED.getRGB());
+        when(mockRobot.createScreenCapture(any(Rectangle.class))).thenReturn(img);
+
+        assertThat(tools.findPixelInRegion(0, 0, 5, 5, "#FF0000"))
+                .isEqualTo("Found #FF0000 at (0, 0)");
+    }
+
+    // -------------------------------------------------------------------------
+    // Screen — waitForScreenStable
+    // -------------------------------------------------------------------------
+
+    @Test
+    void waitForScreenStable_stableImmediately_returnsStableMessage() {
+        BufferedImage img = new BufferedImage(10, 10, BufferedImage.TYPE_INT_RGB);
+        // same image returned every time → stable after first comparison
+        when(mockRobot.createScreenCapture(any(Rectangle.class))).thenReturn(img);
+
+        assertThat(tools.waitForScreenStable(0, 0, 10, 10, 500))
+                .isEqualTo("Screen stable in region (0, 0, 10x10)");
+    }
+
+    @Test
+    void waitForScreenStable_alwaysChanging_returnsTimeoutMessage() {
+        // return a different image object with different content each call
+        when(mockRobot.createScreenCapture(any(Rectangle.class))).thenAnswer(inv -> {
+            BufferedImage img = new BufferedImage(5, 5, BufferedImage.TYPE_INT_RGB);
+            img.setRGB(0, 0, (int) (Math.random() * Integer.MAX_VALUE));
+            return img;
+        });
+
+        String result = tools.waitForScreenStable(0, 0, 5, 5, 50);
+        assertThat(result).startsWith("Timeout:");
+        assertThat(result).contains("did not stabilize");
+    }
+
+    // -------------------------------------------------------------------------
+    // Mouse — scrollUntilPixelColor
+    // -------------------------------------------------------------------------
+
+    @Test
+    void scrollUntilPixelColor_foundImmediately_doesNotScroll() {
+        when(mockRobot.getPixelColor(50, 50)).thenReturn(Color.RED);
+
+        String result = tools.scrollUntilPixelColor(100, 200, 3, 50, 50, "#FF0000", 0, 500);
+        assertThat(result).isEqualTo("Found #FF0000 at (50, 50) after 0 scroll step(s)");
+        verify(mockRobot, never()).mouseWheel(anyInt());
+    }
+
+    @Test
+    void scrollUntilPixelColor_foundAfterScrolling_returnsStepCount() {
+        when(mockRobot.getPixelColor(50, 50))
+                .thenReturn(Color.BLACK)
+                .thenReturn(Color.RED);
+
+        String result = tools.scrollUntilPixelColor(100, 200, 3, 50, 50, "#FF0000", 0, 500);
+        assertThat(result).isEqualTo("Found #FF0000 at (50, 50) after 1 scroll step(s)");
+        verify(mockRobot, times(1)).mouseWheel(3);
+    }
+
+    @Test
+    void scrollUntilPixelColor_timeout_returnsTimeoutMessage() {
+        when(mockRobot.getPixelColor(anyInt(), anyInt())).thenReturn(Color.BLACK);
+
+        String result = tools.scrollUntilPixelColor(0, 0, 3, 0, 0, "#FF0000", 0, 50);
+        assertThat(result).startsWith("Timeout:");
+        assertThat(result).contains("expected #FF0000");
+    }
+
+    @Test
+    void scrollUntilPixelColor_invalidHex_returnsError() {
+        assertThat(tools.scrollUntilPixelColor(0, 0, 3, 0, 0, "ZZZZZZ", 0, 500))
+                .isEqualTo("Invalid color: ZZZZZZ");
+        verifyNoInteractions(mockRobot);
+    }
+
+    @Test
+    void scrollUntilPixelColor_negativeScrollAmount_scrollsUp() {
+        when(mockRobot.getPixelColor(0, 0))
+                .thenReturn(Color.BLACK)
+                .thenReturn(Color.RED);
+
+        tools.scrollUntilPixelColor(0, 0, -3, 0, 0, "#FF0000", 0, 500);
+        verify(mockRobot).mouseWheel(-3);
     }
 }

@@ -11,6 +11,7 @@ import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
 import java.lang.reflect.Field;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -145,6 +146,9 @@ public class ControlPanelWindow implements ApplicationListener<ApplicationReadyE
         centrePanel.add(endpointPanel, BorderLayout.NORTH);
         centrePanel.add(logPanel,      BorderLayout.CENTER);
 
+        // trayRef[0] is set during tray setup below; lambdas capture the array so they see the final value.
+        TrayIcon[] trayRef = {null};
+
         // --- Bottom bar ---
         Panel bottomBar = new Panel(new FlowLayout(FlowLayout.RIGHT, 10, 6));
         bottomBar.setBackground(BG_MID);
@@ -152,7 +156,10 @@ public class ControlPanelWindow implements ApplicationListener<ApplicationReadyE
         Button stopButton = new Button("Stop Server");
         stopButton.setBackground(new Color(160, 50, 50));
         stopButton.setForeground(Color.WHITE);
-        stopButton.addActionListener(e -> shutdown(frame));
+        stopButton.addActionListener(e -> {
+            removeTrayIcon(trayRef);
+            shutdown(frame);
+        });
         bottomBar.add(stopButton);
 
         frame.add(statusBar,   BorderLayout.NORTH);
@@ -161,10 +168,50 @@ public class ControlPanelWindow implements ApplicationListener<ApplicationReadyE
 
         frame.addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
+            public void windowIconified(java.awt.event.WindowEvent e) {
+                if (trayRef[0] != null) {
+                    frame.setVisible(false);
+                }
+            }
+
+            @Override
             public void windowClosing(java.awt.event.WindowEvent e) {
+                removeTrayIcon(trayRef);
                 shutdown(frame);
             }
         });
+
+        // --- System tray ---
+        if (SystemTray.isSupported()) {
+            PopupMenu popup = new PopupMenu();
+            MenuItem showItem = new MenuItem("Show");
+            MenuItem stopItem = new MenuItem("Stop Server");
+            popup.add(showItem);
+            popup.addSeparator();
+            popup.add(stopItem);
+
+            TrayIcon icon = new TrayIcon(createTrayImage(), "Robot MCP", popup);
+            icon.setImageAutoSize(true);
+
+            showItem.addActionListener(e -> restoreFrame(frame));
+            stopItem.addActionListener(e -> {
+                removeTrayIcon(trayRef);
+                shutdown(frame);
+            });
+            icon.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    if (e.getClickCount() == 2) restoreFrame(frame);
+                }
+            });
+
+            try {
+                SystemTray.getSystemTray().add(icon);
+                trayRef[0] = icon;
+            } catch (AWTException ignored) {
+                // tray unavailable — window minimize works normally
+            }
+        }
 
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
@@ -223,6 +270,30 @@ public class ControlPanelWindow implements ApplicationListener<ApplicationReadyE
         row.add(left,  BorderLayout.WEST);
         row.add(right, BorderLayout.EAST);
         return row;
+    }
+
+    private static void restoreFrame(Frame frame) {
+        frame.setVisible(true);
+        frame.setState(Frame.NORMAL);
+        frame.toFront();
+    }
+
+    private static void removeTrayIcon(TrayIcon[] trayRef) {
+        if (trayRef[0] != null) {
+            SystemTray.getSystemTray().remove(trayRef[0]);
+            trayRef[0] = null;
+        }
+    }
+
+    private static Image createTrayImage() {
+        int size = 16;
+        BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setColor(new Color(80, 220, 100));
+        g.fillOval(1, 1, size - 2, size - 2);
+        g.dispose();
+        return img;
     }
 
     private void shutdown(Frame frame) {

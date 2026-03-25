@@ -61,17 +61,20 @@ claude mcp add --transport streamable-http robot-mcp http://127.0.0.1:8080/mcp
 | Tool | Description |
 |---|---|
 | `mouseMove` | Move cursor to (x, y) |
+| `getMousePosition` | Get current cursor coordinates |
 | `leftClick` | Left-click at (x, y) |
 | `doubleClick` | Double-click at (x, y) |
 | `rightClick` | Right-click at (x, y) |
 | `middleClick` | Middle-click at (x, y) |
 | `mouseScroll` | Scroll wheel at (x, y) — positive = down |
 | `mouseDrag` | Click-drag from one point to another |
+| `scrollUntilPixelColor` | Scroll until a watched pixel matches a target color |
 
 ### Keyboard
 | Tool | Description |
 |---|---|
-| `typeText` | Type a string (handles uppercase + common symbols) |
+| `typeText` | Type a string character-by-character (US keyboard layout) |
+| `typeTextViaClipboard` | Place text on the clipboard and paste with CTRL+V — faster, supports Unicode |
 | `pressKey` | Press a named key: `ENTER`, `TAB`, `F5`, `WIN`, etc. |
 | `pressKeyCombination` | Press a combination like `CTRL+C` or `CTRL+SHIFT+T` |
 
@@ -81,10 +84,13 @@ claude mcp add --transport streamable-http robot-mcp http://127.0.0.1:8080/mcp
 | `captureScreen` | Full-screen screenshot (returns image) |
 | `captureRegion` | Screenshot of a rectangle |
 | `captureMonitor` | Screenshot of a specific monitor by index |
+| `captureWindow` | Screenshot of a window by title substring |
 | `listMonitors` | List monitors with resolution and position |
 | `findPixelColor` | Get hex color of a pixel |
+| `findPixelInRegion` | Find the first pixel matching a hex color in a region — returns absolute coordinates |
 | `waitForPixelColor` | Wait until a pixel reaches a target color |
 | `waitForScreenChange` | Wait until any pixel changes in a region |
+| `waitForScreenStable` | Wait until a region stops changing (UI has settled) |
 
 ### Clipboard
 | Tool | Description |
@@ -149,6 +155,8 @@ Key properties in `src/main/resources/application.properties`:
 | `server.port` | `8080` | HTTP port |
 | `server.address` | `127.0.0.1` | Bind address — keep localhost unless you know what you're doing |
 | `spring.ai.mcp.server.name` | `robot-mcp` | MCP server name advertised to clients |
+| `robot.keyHoldMs` | `30` | Milliseconds to hold a key down before releasing — increase if apps miss keypresses |
+| `robot.mouseClickHoldMs` | `30` | Milliseconds to hold a mouse button down before releasing — increase if apps miss clicks |
 
 Enable verbose debug logging by activating the `dev` profile:
 ```bash

@@ -37,6 +37,11 @@ public class RobotRestController {
         return result(robot.mouseMove(body.get("x"), body.get("y")));
     }
 
+    @GetMapping("/mouse/position")
+    public Map<String, String> getMousePosition() {
+        return result(robot.getMousePosition());
+    }
+
     @PostMapping("/mouse/left-click")
     public Map<String, String> leftClick(@RequestBody Map<String, Integer> body) {
         return result(robot.leftClick(body.get("x"), body.get("y")));
@@ -62,6 +67,20 @@ public class RobotRestController {
         return result(robot.mouseScroll(body.get("x"), body.get("y"), body.get("amount")));
     }
 
+    @PostMapping("/mouse/scroll-until-pixel-color")
+    public Map<String, String> scrollUntilPixelColor(@RequestBody Map<String, Object> body) {
+        int scrollX      = ((Number) body.get("scrollX")).intValue();
+        int scrollY      = ((Number) body.get("scrollY")).intValue();
+        int scrollAmount = ((Number) body.get("scrollAmount")).intValue();
+        int watchX       = ((Number) body.get("watchX")).intValue();
+        int watchY       = ((Number) body.get("watchY")).intValue();
+        String hexColor  = (String) body.get("hexColor");
+        int stepDelayMs  = ((Number) body.get("stepDelayMs")).intValue();
+        int timeoutMs    = ((Number) body.get("timeoutMs")).intValue();
+        return result(robot.scrollUntilPixelColor(scrollX, scrollY, scrollAmount,
+                watchX, watchY, hexColor, stepDelayMs, timeoutMs));
+    }
+
     @PostMapping("/mouse/drag")
     public Map<String, String> mouseDrag(@RequestBody Map<String, Integer> body) {
         return result(robot.mouseDrag(body.get("x1"), body.get("y1"), body.get("x2"), body.get("y2")));
@@ -74,6 +93,11 @@ public class RobotRestController {
     @PostMapping("/keyboard/type")
     public Map<String, String> typeText(@RequestBody Map<String, String> body) {
         return result(robot.typeText(body.get("text")));
+    }
+
+    @PostMapping("/keyboard/type-via-clipboard")
+    public Map<String, String> typeTextViaClipboard(@RequestBody Map<String, String> body) {
+        return result(robot.typeTextViaClipboard(body.get("text")));
     }
 
     @PostMapping("/keyboard/press-key")
@@ -141,6 +165,24 @@ public class RobotRestController {
         int height    = ((Number) body.get("height")).intValue();
         int timeoutMs = ((Number) body.get("timeoutMs")).intValue();
         return result(robot.waitForScreenChange(x, y, width, height, timeoutMs));
+    }
+
+    @PostMapping("/screen/wait-for-stable")
+    public Map<String, String> waitForScreenStable(@RequestBody Map<String, Object> body) {
+        int x         = ((Number) body.get("x")).intValue();
+        int y         = ((Number) body.get("y")).intValue();
+        int width     = ((Number) body.get("width")).intValue();
+        int height    = ((Number) body.get("height")).intValue();
+        int timeoutMs = ((Number) body.get("timeoutMs")).intValue();
+        return result(robot.waitForScreenStable(x, y, width, height, timeoutMs));
+    }
+
+    @GetMapping("/screen/find-pixel")
+    public Map<String, String> findPixelInRegion(
+            @RequestParam int x, @RequestParam int y,
+            @RequestParam int width, @RequestParam int height,
+            @RequestParam String hexColor) {
+        return result(robot.findPixelInRegion(x, y, width, height, hexColor));
     }
 
     // -------------------------------------------------------------------------

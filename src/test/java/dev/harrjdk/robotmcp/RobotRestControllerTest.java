@@ -120,6 +120,29 @@ class RobotRestControllerTest {
                 .andExpect(jsonPath("$.result").value("Dragged from (0, 0) to (100, 100)"));
     }
 
+    @Test
+    void getMousePosition_returnsResult() throws Exception {
+        when(robot.getMousePosition()).thenReturn("Mouse at (300, 400)");
+
+        mvc.perform(get("/api/mouse/position"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value("Mouse at (300, 400)"));
+    }
+
+    @Test
+    void scrollUntilPixelColor_returnsResult() throws Exception {
+        when(robot.scrollUntilPixelColor(100, 200, 3, 50, 50, "#FF0000", 100, 5000))
+                .thenReturn("Found #FF0000 at (50, 50) after 2 scroll step(s)");
+
+        mvc.perform(post("/api/mouse/scroll-until-pixel-color")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"scrollX\":100,\"scrollY\":200,\"scrollAmount\":3," +
+                                 "\"watchX\":50,\"watchY\":50,\"hexColor\":\"#FF0000\"," +
+                                 "\"stepDelayMs\":100,\"timeoutMs\":5000}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value("Found #FF0000 at (50, 50) after 2 scroll step(s)"));
+    }
+
     // -------------------------------------------------------------------------
     // Keyboard
     // -------------------------------------------------------------------------
@@ -133,6 +156,17 @@ class RobotRestControllerTest {
                         .content("{\"text\":\"hello\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result").value("Typed: hello"));
+    }
+
+    @Test
+    void typeTextViaClipboard_returnsResult() throws Exception {
+        when(robot.typeTextViaClipboard("hello")).thenReturn("Typed via clipboard: hello");
+
+        mvc.perform(post("/api/keyboard/type-via-clipboard")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"hello\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value("Typed via clipboard: hello"));
     }
 
     @Test
@@ -222,6 +256,31 @@ class RobotRestControllerTest {
                         .content("{\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"timeoutMs\":500}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result").value("Screen changed in region (0, 0, 200x100)"));
+    }
+
+    @Test
+    void waitForScreenStable_returnsResult() throws Exception {
+        when(robot.waitForScreenStable(0, 0, 200, 100, 500))
+                .thenReturn("Screen stable in region (0, 0, 200x100)");
+
+        mvc.perform(post("/api/screen/wait-for-stable")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"timeoutMs\":500}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value("Screen stable in region (0, 0, 200x100)"));
+    }
+
+    @Test
+    void findPixelInRegion_returnsResult() throws Exception {
+        when(robot.findPixelInRegion(10, 20, 100, 80, "#FF0000"))
+                .thenReturn("Found #FF0000 at (53, 47)");
+
+        mvc.perform(get("/api/screen/find-pixel")
+                        .param("x", "10").param("y", "20")
+                        .param("width", "100").param("height", "80")
+                        .param("hexColor", "#FF0000"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value("Found #FF0000 at (53, 47)"));
     }
 
     // -------------------------------------------------------------------------
