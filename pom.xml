@@ -10,7 +10,7 @@
     </parent>
     <groupId>dev.harrjdk</groupId>
     <artifactId>robot-mcp</artifactId>
-    <version>1.0.1-SNAPSHOT</version>
+    <version>1.0.1</version>
     <name>robot-mcp</name>
     <description>MCP server exposing RPA (mouse, keyboard, screen, clipboard, window management) tools via Spring AI</description>
     <licenses>
