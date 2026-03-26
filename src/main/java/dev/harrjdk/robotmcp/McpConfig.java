@@ -18,9 +18,11 @@ public class McpConfig {
     @Bean
     public ToolCallbackProvider robotToolCallbacks(RobotTools robotTools,
                                                    WindowTools windowTools,
-                                                   ClipboardTools clipboardTools) {
+                                                   ClipboardTools clipboardTools,
+                                                   OcrTools ocrTools,
+                                                   UiaTools uiaTools) {
         return MethodToolCallbackProvider.builder()
-                .toolObjects(robotTools, windowTools, clipboardTools)
+                .toolObjects(robotTools, windowTools, clipboardTools, ocrTools, uiaTools)
                 .build();
     }
 
